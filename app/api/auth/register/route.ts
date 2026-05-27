@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     // 3. Business logic: Check phone was OTP-verified in Redis
     const verified = await redis.get<string>(`verified:${phone}`)
     console.log(`[DEBUG] Registration check for ${phone}: verified=${verified} (type=${typeof verified})`)
-    if (verified !== "true" && verified !== true) {
+    if (verified !== "true") {
       return err("Phone number not verified via OTP. Please verify first.", 400)
     }
 
