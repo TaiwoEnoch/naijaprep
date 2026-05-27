@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     // 2. Authentication check second
     const supabase = createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
+    console.log("[DEBUG SUBJECTS] Auth result:", { user, authError })
     if (authError || !user) {
       return err("Unauthorized", 401)
     }

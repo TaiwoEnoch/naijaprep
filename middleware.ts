@@ -3,12 +3,32 @@ import { NextResponse, type NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
+  const authHeader = request.headers.get("authorization")
+  const projectRef = "ouskruinmnukrwwbvtgo"
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
+          if (authHeader && authHeader.startsWith("Bearer ")) {
+            const token = authHeader.substring(7)
+            const session = {
+              access_token: token,
+              refresh_token: "",
+              expires_in: 3600,
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
+              token_type: "bearer",
+              user: {},
+            }
+            return [
+              {
+                name: `sb-${projectRef}-auth-token`,
+                value: JSON.stringify(session),
+              },
+            ]
+          }
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
