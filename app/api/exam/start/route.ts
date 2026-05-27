@@ -3,6 +3,7 @@ import { ok, err, rateLimitErr } from "@/lib/api-response"
 import { rateLimit } from "@/lib/rate-limit"
 import { getCache, setCache } from "@/lib/redis"
 import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import * as Sentry from "@sentry/nextjs"
 import { z } from "zod"
 
@@ -10,6 +11,7 @@ const startExamSchema = z.object({
   subjectId: z.string().uuid(),
   examType: z.string().refine((val) => ["JAMB", "WAEC", "NECO"].includes(val)),
   mode: z.string().refine((val) => ["practice", "mock", "topic", "speed"].includes(val)),
+  studentId: z.string().uuid().optional(),
 })
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -49,7 +51,25 @@ export async function POST(req: NextRequest) {
     if (!validation.success) {
       return err("Invalid request body. subjectId, examType (JAMB/WAEC/NECO), and mode (practice/mock/topic/speed) are required.", 400)
     }
-    const { subjectId, examType, mode } = validation.data
+    const { subjectId, examType, mode, studentId } = validation.data
+
+    let targetUserId = user.id
+    let isTeacherQuery = false
+
+    if (studentId) {
+      const { data: requesterProfile } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (requesterProfile?.role === "teacher" || requesterProfile?.role === "admin") {
+        targetUserId = studentId
+        isTeacherQuery = true
+      } else {
+        return err("Unauthorized: Only teachers or admins can assign exams to other students.", 403)
+      }
+    }
 
     // Mode-specific configurations
     let questionCount = 20
@@ -66,11 +86,13 @@ export async function POST(req: NextRequest) {
       timeLimitSeconds = 600 // 10 mins
     }
 
+    const dbClient = isTeacherQuery ? supabaseAdmin : supabase
+
     // Check user plan
-    const { data: userProfile, error: profileError } = await supabase
+    const { data: userProfile, error: profileError } = await dbClient
       .from("users")
       .select("plan")
-      .eq("id", user.id)
+      .eq("id", targetUserId)
       .single()
 
     if (profileError || !userProfile) {
@@ -83,10 +105,10 @@ export async function POST(req: NextRequest) {
       const startOfToday = new Date()
       startOfToday.setHours(0, 0, 0, 0)
 
-      const { data: todaySessions, error: sessionCountError } = await supabase
+      const { data: todaySessions, error: sessionCountError } = await dbClient
         .from("exam_sessions")
         .select("total_questions")
-        .eq("user_id", user.id)
+        .eq("user_id", targetUserId)
         .gte("created_at", startOfToday.toISOString())
 
       if (sessionCountError) {
@@ -107,7 +129,7 @@ export async function POST(req: NextRequest) {
     if (cachedQuestions) {
       questionsList = typeof cachedQuestions === "string" ? JSON.parse(cachedQuestions) : cachedQuestions
     } else {
-      const { data, error: dbError } = await supabase
+      const { data, error: dbError } = await dbClient
         .from("questions")
         .select("*")
         .eq("subject_id", subjectId)
@@ -127,10 +149,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Get user progress
-    const { data: progressData } = await supabase
+    const { data: progressData } = await dbClient
       .from("user_progress")
       .select("topic_id, correct_count, total_count")
-      .eq("user_id", user.id)
+      .eq("user_id", targetUserId)
       .eq("subject_id", subjectId)
 
     const weakTopics = new Set<string>()
@@ -196,10 +218,10 @@ export async function POST(req: NextRequest) {
     const finalQuestions = shuffleArray(selectedQuestions.slice(0, questionCount))
 
     // Create active exam session
-    const { data: sessionRecord, error: sessionError } = await supabase
+    const { data: sessionRecord, error: sessionError } = await dbClient
       .from("exam_sessions")
       .insert({
-        user_id: user.id,
+        user_id: targetUserId,
         subject_id: subjectId,
         exam_type: examType,
         mode: mode,
@@ -224,14 +246,14 @@ export async function POST(req: NextRequest) {
       is_flagged: false,
     }))
 
-    const { error: answersError } = await supabase
+    const { error: answersError } = await dbClient
       .from("exam_answers")
       .insert(answersPlaceholders)
 
     if (answersError) {
       console.error("Failed to insert exam answers placeholders:", answersError)
       // Rollback session
-      await supabase.from("exam_sessions").delete().eq("id", sessionRecord.id)
+      await dbClient.from("exam_sessions").delete().eq("id", sessionRecord.id)
       return err("Failed to initialize exam session answers", 500)
     }
 

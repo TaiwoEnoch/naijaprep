@@ -3,6 +3,7 @@ import { ok, err, rateLimitErr } from "@/lib/api-response"
 import { rateLimit } from "@/lib/rate-limit"
 import { invalidateCache } from "@/lib/redis"
 import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import * as Sentry from "@sentry/nextjs"
 import { z } from "zod"
 
@@ -61,9 +62,73 @@ export async function GET(req: NextRequest) {
       console.error("Fetch user subjects error:", subjectsError)
     }
 
+    // Teacher school student query
+    let students: any[] = []
+    let recentActivity: any[] = []
+    if (profile.role === "teacher" || profile.role === "admin") {
+      const { data: schoolStudents } = await supabaseAdmin
+        .from("users")
+        .select(`
+          id,
+          first_name,
+          last_name,
+          phone,
+          plan,
+          exam_types,
+          target_score,
+          exam_date,
+          avatar_url,
+          streak_count,
+          longest_streak,
+          readiness_pct,
+          predicted_score,
+          created_at
+        `)
+        .eq("school_id", profile.school_id)
+        .eq("role", "student")
+        .eq("is_active", true)
+        
+      students = schoolStudents || []
+
+      if (students.length > 0) {
+        const studentIds = students.map((s) => s.id)
+        const { data: activityData } = await supabaseAdmin
+          .from("exam_sessions")
+          .select(`
+            id,
+            score_pct,
+            created_at,
+            user_id,
+            status,
+            subjects (
+              name
+            ),
+            users (
+              first_name,
+              last_name
+            )
+          `)
+          .in("user_id", studentIds)
+          .eq("status", "completed")
+          .order("created_at", { ascending: false })
+          .limit(10)
+
+        recentActivity = (activityData || []).map((session: any) => ({
+          id: session.id,
+          scorePct: session.score_pct,
+          createdAt: session.created_at,
+          userId: session.user_id,
+          subjectName: session.subjects?.name || "Unknown Subject",
+          studentName: `${session.users?.first_name || ""} ${session.users?.last_name || ""}`.trim()
+        }))
+      }
+    }
+
     return ok({
       profile,
       subjects: subjects || [],
+      students,
+      recentActivity,
     })
   } catch (error) {
     Sentry.captureException(error)
