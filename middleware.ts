@@ -5,7 +5,7 @@ export async function middleware(request: NextRequest) {
   if (process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true") {
     const url = request.nextUrl.clone()
     const pathname = url.pathname
-    const allowList = ["/maintenance", "/api/health", "/api/waitlist", "/_next", "/favicon"]
+    const allowList = ["/maintenance", "/upload", "/api/health", "/api/waitlist", "/api/upload", "/_next", "/favicon"]
     const isAllowed = allowList.some((path) => pathname.startsWith(path))
 
     if (!isAllowed) {
