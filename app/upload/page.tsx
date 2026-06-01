@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 
 const SUBJECTS = [
   "Accounting",
@@ -39,42 +39,77 @@ const SUBJECTS = [
 const EXAM_TYPES = ["JAMB", "WAEC", "NECO"]
 
 function buildFilename(subject: string, examType: string, year: string, imgNumber: string) {
-  const slug = subject.replace(/\s+/g, "_")
-  return `${slug}_${examType}_${year}_IMG${imgNumber}.png`
+  return `${subject.replace(/\s+/g, "_")}_${examType}_${year}_IMG${imgNumber}.png`
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button
+      onClick={copy}
+      title="Copy URL"
+      className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-[#1d9e75]/20 border border-white/10 hover:border-[#1d9e75]/40 text-slate-400 hover:text-[#5DCAA5] transition-all text-xs font-semibold"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  )
 }
 
 export default function UploadPage() {
+  // --- Auth ---
   const [password, setPassword] = useState("")
   const [authed, setAuthed] = useState(false)
   const [authError, setAuthError] = useState("")
   const [authLoading, setAuthLoading] = useState(false)
 
+  // --- Form fields ---
   const [subject, setSubject] = useState(SUBJECTS[0])
   const [examType, setExamType] = useState(EXAM_TYPES[0])
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const [imgNumber, setImgNumber] = useState("1")
   const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+
+  // --- Upload state ---
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<{ filename: string; url: string } | null>(null)
   const [uploadError, setUploadError] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // --- Image list ---
   const [images, setImages] = useState<{ name: string; url: string }[]>([])
   const [loadingImages, setLoadingImages] = useState(false)
 
-  const storedPassword =
-    typeof window !== "undefined" ? sessionStorage.getItem("upload_pw") ?? "" : ""
-
+  // Restore session on mount
   useEffect(() => {
-    if (typeof window !== "undefined" && sessionStorage.getItem("upload_pw")) {
+    const saved = sessionStorage.getItem("upload_pw")
+    if (saved) {
+      setPassword(saved)
       setAuthed(true)
-      setPassword(sessionStorage.getItem("upload_pw")!)
     }
   }, [])
 
+  // Fetch images once authed
   useEffect(() => {
-    if (authed && password) fetchImages()
+    if (authed) fetchImages()
   }, [authed])
+
+  // Build object URL for preview; revoke old one to avoid memory leaks
+  useEffect(() => {
+    if (!file) { setPreview(null); return }
+    const url = URL.createObjectURL(file)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  const filename = buildFilename(subject, examType, year, imgNumber)
+
+  // ---- Handlers ----
 
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault()
@@ -99,13 +134,11 @@ export default function UploadPage() {
     }
   }
 
-  async function fetchImages() {
+  const fetchImages = useCallback(async () => {
     setLoadingImages(true)
     try {
       const pw = sessionStorage.getItem("upload_pw") ?? password
-      const res = await fetch("/api/upload/images", {
-        headers: { "x-upload-password": pw },
-      })
+      const res = await fetch("/api/upload", { headers: { "x-upload-password": pw } })
       if (res.ok) {
         const data = await res.json()
         setImages(data.files ?? [])
@@ -115,9 +148,7 @@ export default function UploadPage() {
     } finally {
       setLoadingImages(false)
     }
-  }
-
-  const filename = buildFilename(subject, examType, year, imgNumber)
+  }, [password])
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault()
@@ -130,18 +161,19 @@ export default function UploadPage() {
       const pw = sessionStorage.getItem("upload_pw") ?? password
       const form = new FormData()
       form.append("file", file)
-      form.append("filename", filename)
+      form.append("subject", subject)
+      form.append("examType", examType)
+      form.append("year", year)
+      form.append("imageNumber", imgNumber)
+      form.append("password", pw)
 
-      const res = await fetch("/api/upload/image", {
-        method: "POST",
-        headers: { "x-upload-password": pw },
-        body: form,
-      })
-
+      const res = await fetch("/api/upload", { method: "POST", body: form })
       const data = await res.json()
+
       if (res.ok) {
         setUploadResult({ filename: data.filename, url: data.url })
         setFile(null)
+        setPreview(null)
         if (fileRef.current) fileRef.current.value = ""
         setImgNumber((n) => String(Number(n) + 1))
         fetchImages()
@@ -155,22 +187,23 @@ export default function UploadPage() {
     }
   }
 
+  // ---- Password gate ----
   if (!authed) {
     return (
       <div className="min-h-screen bg-[#081810] flex items-center justify-center px-4">
         <div className="w-full max-w-sm bg-white/5 border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/40">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-[#1d9e75] flex items-center justify-center font-extrabold text-white text-lg">
+            <div className="w-10 h-10 rounded-xl bg-[#1d9e75] flex items-center justify-center font-extrabold text-white text-xl">
               N
             </div>
-            <span className="font-bold text-white text-lg tracking-tight">NaijaPrep Upload</span>
+            <div>
+              <p className="font-bold text-white text-base leading-none">NaijaPrep</p>
+              <p className="text-xs text-slate-400 mt-0.5">Image Upload Tool</p>
+            </div>
           </div>
-
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Password
-              </label>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">Password</label>
               <input
                 type="password"
                 value={password}
@@ -195,14 +228,15 @@ export default function UploadPage() {
     )
   }
 
+  // ---- Main upload UI ----
   return (
-    <div className="min-h-screen bg-[#081810] text-white px-4 py-10">
-      <div className="max-w-3xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[#081810] text-white px-4 py-8 sm:py-12">
+      <div className="max-w-3xl mx-auto space-y-6">
 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#1d9e75] flex items-center justify-center font-extrabold text-white text-lg">
+            <div className="w-10 h-10 rounded-xl bg-[#1d9e75] flex items-center justify-center font-extrabold text-white text-xl">
               N
             </div>
             <div>
@@ -211,24 +245,21 @@ export default function UploadPage() {
             </div>
           </div>
           <button
-            onClick={() => {
-              sessionStorage.removeItem("upload_pw")
-              setAuthed(false)
-              setPassword("")
-            }}
+            onClick={() => { sessionStorage.removeItem("upload_pw"); setAuthed(false); setPassword("") }}
             className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
           >
             Sign out
           </button>
         </div>
 
-        {/* Upload form */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 shadow-xl shadow-black/30">
+        {/* Upload form card */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 sm:p-6 shadow-xl shadow-black/30">
           <h2 className="text-sm font-bold text-white mb-5">Upload Question Image</h2>
 
           <form onSubmit={handleUpload} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Subject */}
+
+              {/* Subject — full width */}
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-400 mb-1.5">Subject</label>
                 <select
@@ -236,9 +267,7 @@ export default function UploadPage() {
                   onChange={(e) => setSubject(e.target.value)}
                   className="w-full bg-[#0a1f14] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#1d9e75]/50 transition-colors"
                 >
-                  {SUBJECTS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
+                  {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
 
@@ -250,9 +279,7 @@ export default function UploadPage() {
                   onChange={(e) => setExamType(e.target.value)}
                   className="w-full bg-[#0a1f14] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#1d9e75]/50 transition-colors"
                 >
-                  {EXAM_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
+                  {EXAM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
 
@@ -283,8 +310,8 @@ export default function UploadPage() {
                 />
               </div>
 
-              {/* File */}
-              <div>
+              {/* File input */}
+              <div className={preview ? "" : "sm:col-span-2"}>
                 <label className="block text-xs font-semibold text-slate-400 mb-1.5">Image File (JPG / PNG)</label>
                 <input
                   ref={fileRef}
@@ -295,29 +322,43 @@ export default function UploadPage() {
                   required
                 />
               </div>
+
+              {/* Image preview — shows when a file is selected */}
+              {preview && (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-xs font-semibold text-slate-400">Preview</p>
+                  <div className="h-[120px] rounded-xl overflow-hidden border border-white/10 bg-[#0a1f14] flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={preview}
+                      alt="preview"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Generated filename preview */}
-            <div className="bg-[#0a1f14] border border-[#1d9e75]/20 rounded-xl px-4 py-3 flex items-center gap-2">
-              <span className="text-xs text-slate-500 shrink-0">Filename:</span>
-              <span className="text-xs font-mono text-[#5DCAA5] truncate">{filename}</span>
+            {/* Filename preview — always visible */}
+            <div className="bg-[#0a1f14] border border-[#1d9e75]/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs text-slate-500 shrink-0">Filename:</span>
+                <span className="text-xs font-mono text-[#5DCAA5] truncate">{filename}</span>
+              </div>
+              <CopyButton text={filename} />
             </div>
 
             {uploadError && <p className="text-red-400 text-xs">{uploadError}</p>}
 
+            {/* Success banner */}
             {uploadResult && (
-              <div className="bg-[#1d9e75]/10 border border-[#1d9e75]/30 rounded-xl px-4 py-3 space-y-1">
-                <p className="text-[#5DCAA5] text-xs font-semibold">
-                  Uploaded: {uploadResult.filename}
-                </p>
-                <a
-                  href={uploadResult.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-slate-400 hover:text-white underline break-all"
-                >
-                  {uploadResult.url}
-                </a>
+              <div className="bg-[#1d9e75]/10 border border-[#1d9e75]/30 rounded-xl px-4 py-3 space-y-2">
+                <p className="text-[#5DCAA5] text-xs font-bold">Uploaded successfully</p>
+                <p className="text-xs font-mono text-slate-300">{uploadResult.filename}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 truncate flex-1">{uploadResult.url}</span>
+                  <CopyButton text={uploadResult.url} />
+                </div>
               </div>
             )}
 
@@ -332,9 +373,14 @@ export default function UploadPage() {
         </div>
 
         {/* Uploaded images list */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 shadow-xl shadow-black/30">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 sm:p-6 shadow-xl shadow-black/30">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-sm font-bold text-white">Uploaded Images</h2>
+            <h2 className="text-sm font-bold text-white">
+              Uploaded Images
+              {images.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-slate-500">({images.length})</span>
+              )}
+            </h2>
             <button
               onClick={fetchImages}
               disabled={loadingImages}
@@ -345,26 +391,34 @@ export default function UploadPage() {
           </div>
 
           {loadingImages ? (
-            <p className="text-xs text-slate-500 text-center py-6">Loading...</p>
+            <p className="text-xs text-slate-500 text-center py-8">Loading...</p>
           ) : images.length === 0 ? (
-            <p className="text-xs text-slate-500 text-center py-6">No images uploaded yet.</p>
+            <p className="text-xs text-slate-500 text-center py-8">No images uploaded yet.</p>
           ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {images.map((img) => (
-                <a
+                <div
                   key={img.name}
-                  href={img.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between gap-3 px-4 py-3 bg-[#0a1f14] border border-white/5 rounded-xl hover:border-[#1d9e75]/30 transition-colors group"
+                  className="flex items-center gap-2 px-3 py-2.5 bg-[#0a1f14] border border-white/5 rounded-xl hover:border-[#1d9e75]/20 transition-colors"
                 >
-                  <span className="text-xs font-mono text-slate-300 group-hover:text-white truncate">
-                    {img.name}
-                  </span>
-                  <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-[#5DCAA5] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
+                  {/* Filename + open link */}
+                  <a
+                    href={img.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 min-w-0 flex-1 group"
+                    title="Open image"
+                  >
+                    <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-[#5DCAA5] shrink-0 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    <span className="text-xs font-mono text-slate-300 group-hover:text-white truncate transition-colors">
+                      {img.name}
+                    </span>
+                  </a>
+                  {/* Copy URL */}
+                  <CopyButton text={img.url} />
+                </div>
               ))}
             </div>
           )}
