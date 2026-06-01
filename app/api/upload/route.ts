@@ -40,6 +40,30 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, filename, url: urlData.publicUrl })
 }
 
+// DELETE — remove a file from storage
+export async function DELETE(req: NextRequest) {
+  const { filename, password } = await req.json().catch(() => ({}))
+
+  if (!password || password !== process.env.UPLOAD_PAGE_PASSWORD) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!filename) {
+    return NextResponse.json({ error: "Missing filename" }, { status: 400 })
+  }
+
+  const { error } = await supabaseAdmin.storage
+    .from("question-images")
+    .remove([filename])
+
+  if (error) {
+    console.error("Storage delete error:", error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true, deleted: true, filename })
+}
+
 // GET — list uploaded images
 export async function GET(req: NextRequest) {
   const password = req.headers.get("x-upload-password")
