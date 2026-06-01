@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS waitlist (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone VARCHAR(15) UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);

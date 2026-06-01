@@ -358,25 +358,9 @@ export default function LandingPage() {
             </span>
           </div>
 
-          {/* Desktop Nav Links (hidden on Mobile) */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="hover:text-white transition-colors cursor-pointer text-slate-300 font-medium bg-transparent border-none outline-none"
-            >
-              How it works
-            </button>
-            <Link href="/plans" className="hover:text-white transition-colors">
-              Pricing
-            </Link>
-            <Link href="/leaderboard" className="hover:text-white transition-colors">
-              Leaderboard
-            </Link>
-          </nav>
-
           {/* Desktop Buttons (hidden on Mobile) */}
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/auth/signup">
+            <Link href="/auth/login">
               <motion.button 
                 variants={buttonPressVariants}
                 whileTap="tap"
@@ -436,31 +420,8 @@ export default function LandingPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-4 pt-4 pb-6 space-y-4 flex flex-col">
-                <button 
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    setIsModalOpen(true);
-                  }}
-                  className="text-left text-sm font-semibold text-slate-300 hover:text-white py-2 border-b border-white/5 w-full bg-transparent border-none outline-none"
-                >
-                  How it works
-                </button>
                 <Link 
-                  href="/plans"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="text-sm font-semibold text-slate-300 hover:text-white py-2 border-b border-white/5"
-                >
-                  Pricing
-                </Link>
-                <Link 
-                  href="/leaderboard"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="text-sm font-semibold text-slate-300 hover:text-white py-2 border-b border-white/5"
-                >
-                  Leaderboard
-                </Link>
-                <Link 
-                  href="/auth/signup"
+                  href="/auth/login"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="text-sm font-semibold text-slate-300 hover:text-white py-2 border-b border-white/5"
                 >

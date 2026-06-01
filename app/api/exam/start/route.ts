@@ -105,18 +105,23 @@ export async function POST(req: NextRequest) {
       const startOfToday = new Date()
       startOfToday.setHours(0, 0, 0, 0)
 
-      const { data: todaySessions, error: sessionCountError } = await dbClient
+      const { count: todayCount, error: sessionCountError } = await dbClient
         .from("exam_sessions")
-        .select("total_questions")
+        .select("*", { count: "exact", head: true })
         .eq("user_id", targetUserId)
+        .eq("status", "completed")
         .gte("created_at", startOfToday.toISOString())
+
+      console.log('User ID:', targetUserId)
+      console.log('User plan:', userProfile.plan)
+      console.log('Today start:', startOfToday)
+      console.log('Today session count:', todayCount)
 
       if (sessionCountError) {
         console.error("Today session count fetch error:", sessionCountError)
       }
 
-      const questionsAnsweredToday = (todaySessions || []).reduce((acc, curr) => acc + curr.total_questions, 0)
-      if (questionsAnsweredToday + questionCount > 10) {
+      if (todayCount !== null && todayCount >= 1) {
         return err("Free plan limit reached (10 questions per day). Please upgrade your subscription to continue practicing.", 403)
       }
     }

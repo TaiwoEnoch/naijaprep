@@ -2,6 +2,18 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
+  if (process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true") {
+    const url = request.nextUrl.clone()
+    const pathname = url.pathname
+    const allowList = ["/maintenance", "/api/health", "/api/waitlist", "/_next", "/favicon"]
+    const isAllowed = allowList.some((path) => pathname.startsWith(path))
+
+    if (!isAllowed) {
+      url.pathname = "/maintenance"
+      return NextResponse.redirect(url)
+    }
+  }
+
   let response = NextResponse.next({ request: { headers: request.headers } })
   const authHeader = request.headers.get("authorization")
   const projectRef = "ouskruinmnukrwwbvtgo"

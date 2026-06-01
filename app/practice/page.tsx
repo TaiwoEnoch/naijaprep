@@ -28,7 +28,8 @@ import { buttonPressVariants, staggerContainerVariants, staggerItemVariants } fr
 interface Subject {
   id: string;
   name: string;
-  code: string;
+  code?: string;
+  slug?: string;
   is_active: boolean;
 }
 
@@ -67,8 +68,9 @@ export default function PracticePage() {
   };
 
   // Mocked question count per subject to display high-fidelity detail
-  const getQuestionCount = (code: string) => {
-    const seed = code.charCodeAt(0) + (code.charCodeAt(1) || 0);
+  const getQuestionCount = (code?: string) => {
+    if (!code || typeof code !== 'string') return 1000
+    const seed = code.charCodeAt(0) + (code.charCodeAt(1) || 0)
     return 1000 + (seed % 10) * 150;
   };
 
@@ -190,7 +192,7 @@ export default function PracticePage() {
             >
               {subjects?.map((sub, idx) => {
                 const SubjectIcon = getSubjectIcon(sub.name);
-                const qCount = getQuestionCount(sub.code);
+                const qCount = getQuestionCount(sub.code ?? sub.slug ?? sub.id ?? 'default');
                 
                 return (
                   <motion.div

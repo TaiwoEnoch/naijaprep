@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     const { phone, firstName, lastName, pin, examTypes, targetScore } = validation.data
 
     // 3. Business logic: Check phone was OTP-verified in Redis
+    console.log(`Checking verified key: verified:${phone} value:`, await redis.get(`verified:${phone}`))
     const verified = await redis.get<string>(`verified:${phone}`)
     console.log(`[DEBUG] Registration check for ${phone}: verified=${verified} (type=${typeof verified})`)
     if (verified !== "true") {
@@ -103,7 +104,9 @@ export async function POST(req: NextRequest) {
     // Delete verified flag from Redis to prevent duplicate submissions
     await redis.del(`verified:${phone}`)
 
-    return ok({ user: userRecord, message: "Account created successfully" })
+    const responseData = { user: userRecord, message: "Account created successfully" }
+    console.log('Register response data:', JSON.stringify(responseData, null, 2))
+    return ok(responseData)
   } catch (error) {
     Sentry.captureException(error)
     // Cleanup if something unexpected happened but auth user was created

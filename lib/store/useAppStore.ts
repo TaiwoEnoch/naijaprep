@@ -8,6 +8,7 @@ export interface User {
   examType?: "WAEC" | "NECO" | "JAMB";
   streak: number;
   isPremium: boolean;
+  plan?: string;
 }
 
 interface AppState {

@@ -104,10 +104,14 @@ function CreatePinContent() {
         throw new Error("Account created but failed to establish session. Please sign in.");
       }
 
+      const loginSession = loginData?.data?.session || loginData?.session;
+      const accessToken = loginData?.data?.accessToken || loginData?.accessToken;
+      const loginUser = loginData?.data?.user || loginData?.user;
+
       // 3. Set Supabase session in the browser to store authorization cookies
       const { error: sessionError } = await supabase.auth.setSession({
-        access_token: loginData.accessToken,
-        refresh_token: loginData.session.refresh_token,
+        access_token: accessToken || "",
+        refresh_token: loginSession?.refresh_token || "",
       });
 
       if (sessionError) {
@@ -116,13 +120,13 @@ function CreatePinContent() {
 
       // 4. Update Zustand state
       setUser({
-        id: loginData.user.id,
-        name: loginData.user.first_name,
-        email: loginData.user.phone + "@naijaprep.com",
-        role: loginData.user.role,
+        id: loginUser?.id || "",
+        name: loginUser?.first_name || "",
+        email: (loginUser?.phone || "") + "@naijaprep.com",
+        role: loginUser?.role || "student",
         examType: undefined, // to onboarding select
-        streak: loginData.user.streak_count || 1,
-        isPremium: loginData.user.plan !== "free",
+        streak: loginUser?.streak_count || 1,
+        isPremium: loginUser?.plan !== "free",
       });
 
       // 5. Redirect to onboarding step exam
@@ -142,7 +146,7 @@ function CreatePinContent() {
     filled: {
       scale: [1, 1.3, 1],
       backgroundColor: "#0F6E56",
-      transition: { type: "spring", stiffness: 300, damping: 15 },
+      transition: { type: "tween", duration: 0.3, ease: "easeInOut" },
     },
     wave: (i: number) => ({
       y: [0, -12, 0],
