@@ -105,9 +105,7 @@ export default function MaintenancePage() {
                 <h1 className="text-lg font-semibold text-white/90">NaijaPrep</h1>
               </div>
             </div>
-            <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-100">
-              Maintenance Mode
-            </div>
+
           </header>
 
           <div className="mt-14 space-y-6 text-center sm:mt-20">
